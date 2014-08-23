@@ -15,6 +15,7 @@ class AstronClientRepository(ClientRepositoryBase):
     * CLIENT_HELLO_RESP
     * CLIENT_EJECT ( error_code, reason )
     * CLIENT_OBJECT_LEAVING ( do_id )
+    * CLIENT_OBJECT_LEAVING_OWNER ( do_id )
     * CLIENT_ADD_INTEREST ( context, interest_id, parent_id, zone_id )
     * CLIENT_ADD_INTEREST_MULTIPLE ( icontext, interest_id, parent_id, [zone_ids] )
     * CLIENT_REMOVE_INTEREST ( context, interest_id )
@@ -38,6 +39,7 @@ class AstronClientRepository(ClientRepositoryBase):
                                  CLIENT_OBJECT_SET_FIELD: self.handleUpdateField,
                                  CLIENT_OBJECT_SET_FIELDS: self.handleUpdateFields,
                                  CLIENT_OBJECT_LEAVING: self.handleObjectLeaving,
+                                 CLIENT_OBJECT_LEAVING_OWNER: self.handleObjectLeavingOwner,
                                  CLIENT_OBJECT_LOCATION: self.handleObjectLocation,
                                  CLIENT_ADD_INTEREST: self.handleAddInterest,
                                  CLIENT_ADD_INTEREST_MULTIPLE: self.handleAddInterestMultiple,
@@ -147,6 +149,14 @@ class AstronClientRepository(ClientRepositoryBase):
         dist_obj.delete()
         self.deleteObject(do_id)
         messenger.send("CLIENT_OBJECT_LEAVING", [do_id])
+
+    def handleObjectLeavingOwner(self, di):
+        do_id = di.get_uint32()
+        dist_obj = self.doId2ownerView.get(do_id)
+        dist_obj.delete()
+        #self.deleteObject(do_id)
+        del self.doId2ownerView[do_id]
+        messenger.send("CLIENT_OBJECT_LEAVING_OWNER", [do_id])
 
     def handleAddInterest(self, di):
         context = di.get_uint32()
