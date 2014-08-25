@@ -152,10 +152,13 @@ class AstronClientRepository(ClientRepositoryBase):
 
     def handleObjectLeavingOwner(self, di):
         do_id = di.get_uint32()
-        dist_obj = self.doId2ownerView.get(do_id)
-        dist_obj.delete()
-        del self.doId2ownerView[do_id]
-        messenger.send("CLIENT_OBJECT_LEAVING_OWNER", [do_id])
+        try:
+            dist_obj = self.doId2ownerView.get(do_id)
+            dist_obj.delete()
+            del self.doId2ownerView[do_id]
+            messenger.send("CLIENT_OBJECT_LEAVING_OWNER", [do_id])
+        except KeyError:
+            self.notify.warning("Can't remove inexistant OV %s" % (str(do_id), ))
 
     def handleAddInterest(self, di):
         context = di.get_uint32()
