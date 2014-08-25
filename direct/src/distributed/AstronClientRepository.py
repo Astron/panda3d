@@ -153,7 +153,7 @@ class AstronClientRepository(ClientRepositoryBase):
     def handleObjectLeavingOwner(self, di):
         do_id = di.get_uint32()
         try:
-            dist_obj = self.doId2ownerView.get(do_id)
+            dist_obj = self.doId2ownerView[do_id]
             dist_obj.delete()
             del self.doId2ownerView[do_id]
             messenger.send("CLIENT_OBJECT_LEAVING_OWNER", [do_id])
