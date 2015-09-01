@@ -472,7 +472,7 @@ class AppRunner(DirectObject):
             file.unlink()
             return False
 
-        if not fileSpec.fullVerify(pathname = localPathname):
+        if not fileSpec.fullVerify(pathname = localPathname, notify = self.notify):
             # No good after download.
             self.notify.info("%s is still no good after downloading." % (url))
             return False
@@ -635,13 +635,13 @@ class AppRunner(DirectObject):
         try:
             taskMgr.run()
 
-        except SystemExit:
+        except SystemExit as err:
             # Presumably the window has already been shut down here, but shut
             # it down again for good measure.
             if hasattr(__builtin__, "base"):
                 base.destroy()
 
-            self.notify.info("Normal exit.")
+            self.notify.info("Normal exit with status %s." % repr(err.code))
             raise
 
         except:

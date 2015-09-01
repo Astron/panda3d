@@ -1235,11 +1235,13 @@ void InterfaceMakerPythonNative::
 write_sub_module(ostream &out, Object *obj) {
   //Object * obj = _objects[_embeded_index] ;
   string class_name = make_safe_name(obj->_itype.get_scoped_name());
+  string class_ptr;
   out << "  // Module init upcall for " << obj->_itype.get_scoped_name() << "\n";
 
   if (!obj->_itype.is_typedef()) {
     out << "  // " << *(obj->_itype._cpptype) << "\n";
     out << "  Dtool_PyModuleClassInit_" << class_name << "(module);\n";
+    class_ptr = "&Dtool_" + class_name;
 
   } else {
     // Unwrap typedefs.
@@ -1258,22 +1260,29 @@ write_sub_module(ostream &out, Object *obj) {
 
     if (!isExportThisRun(wrapped_itype._cpptype)) {
       _external_imports.insert(TypeManager::resolve_type(wrapped_itype._cpptype));
+
+      class_ptr = "Dtool_Ptr_" + class_name;
+      out << "  assert(" << class_ptr << " != NULL);\n";
+    } else {
+      class_ptr = "&Dtool_" + class_name;
     }
   }
 
   std::string export_class_name = classNameFromCppName(obj->_itype.get_name(), false);
   std::string export_class_name2 = classNameFromCppName(obj->_itype.get_name(), true);
 
+  class_ptr = "(PyObject *)" + class_ptr;
+
   // Note: PyModule_AddObject steals a reference, so we have to call Py_INCREF
   // for every but the first time we add it to the module.
   if (obj->_itype.is_typedef()) {
-    out << "  Py_INCREF((PyObject *)&Dtool_" << class_name << ");\n";
+    out << "  Py_INCREF(" << class_ptr << ");\n";
   }
 
-  out << "  PyModule_AddObject(module, \"" << export_class_name << "\", (PyObject *)&Dtool_" << class_name << ");\n";
+  out << "  PyModule_AddObject(module, \"" << export_class_name << "\", " << class_ptr << ");\n";
   if (export_class_name != export_class_name2) {
-    out << "  Py_INCREF((PyObject *)&Dtool_" << class_name << ");\n";
-    out << "  PyModule_AddObject(module, \"" << export_class_name2 << "\", (PyObject *)&Dtool_" << class_name << ");\n";
+    out << "  Py_INCREF(Dtool_Ptr_" << class_name << ");\n";
+    out << "  PyModule_AddObject(module, \"" << export_class_name2 << "\", " << class_ptr << ");\n";
   }
 }
 
@@ -2364,8 +2373,7 @@ write_module_class(ostream &out, Object *obj) {
           out << "  " << cClassName << " *local_this = NULL;\n";
           out << "  DTOOL_Call_ExtractThisPointerForType(self, &Dtool_" << ClassName << ", (void **) &local_this);\n";
           out << "  if (local_this == NULL) {\n";
-          out << "    PyErr_SetString(PyExc_AttributeError, \"C++ object is not yet constructed, or already destructed.\");\n";
-          out << "    return -1;\n";
+          out << "    return 0;\n";
           out << "  }\n\n";
 
           // Find the remap.  There should be only one.

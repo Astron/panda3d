@@ -1,7 +1,7 @@
 __all__ = ['register', 'sharedPackages',
            'reloadSharedPackage', 'reloadSharedPackages']
 
-from panda3d.core import Filename, VirtualFileSystem, VirtualFileMountSystem, OFileStream, copyStream
+from panda3d._core import Filename, VirtualFileSystem, VirtualFileMountSystem, OFileStream, copyStream
 import sys
 import marshal
 import imp
@@ -76,8 +76,7 @@ class VFSImporter:
             if desc[2] != imp.C_EXTENSION:
                 continue
 
-            filename = Filename(path)
-            filename.setExtension(desc[0][1:])
+            filename = Filename(path + desc[0])
             vfile = vfs.getFile(filename, True)
             if vfile:
                 return VFSLoader(dir_path, vfile, filename, FTExtensionModule,

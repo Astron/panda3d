@@ -8,7 +8,8 @@ import marshal
 import imp
 import platform
 import types
-from distutils.sysconfig import PREFIX, get_python_inc, get_python_version
+from StringIO import StringIO
+from distutils.sysconfig import PREFIX, get_python_inc, get_python_version, get_config_var
 
 # Temporary (?) try..except to protect against unbuilt p3extend_frozen.
 try:
@@ -17,7 +18,6 @@ except ImportError:
     p3extend_frozen = None
 
 from panda3d.core import *
-from pandac.extension_native_helpers import dll_suffix, dll_ext
 
 # Check to see if we are running python_d, which implies we have a
 # debug build, and we have to build the module with debug options.
@@ -64,7 +64,7 @@ class CompilationEnvironment:
         # Paths to Python stuff.
         self.Python = None
         self.PythonIPath = get_python_inc()
-        self.PythonVersion = get_python_version()
+        self.PythonVersion = get_config_var("LDVERSION") or get_python_version()
 
         # The VC directory of Microsoft Visual Studio (if relevant)
         self.MSVC = None
@@ -498,7 +498,8 @@ class Freezer:
         def __init__(self, moduleName, filename = None,
                      implicit = False, guess = False,
                      exclude = False, forbid = False,
-                     allowChildren = False, fromSource = None):
+                     allowChildren = False, fromSource = None,
+                     text = None):
             # The Python module name.
             self.moduleName = moduleName
 
@@ -532,6 +533,9 @@ class Freezer:
             # Additional black-box information about where this module
             # record came from, supplied by the caller.
             self.fromSource = fromSource
+
+            # If this is set, it contains Python code of the module.
+            self.text = text
 
             # Some sanity checks.
             if not self.exclude:
@@ -749,7 +753,8 @@ class Freezer:
         return modules
 
     def addModule(self, moduleName, implicit = False, newName = None,
-                  filename = None, guess = False, fromSource = None):
+                  filename = None, guess = False, fromSource = None,
+                  text = None):
         """ Adds a module to the list of modules to be exported by
         this tool.  If implicit is true, it is OK if the module does
         not actually exist.
@@ -805,7 +810,7 @@ class Freezer:
                     # It's actually a regular module.
                     self.modules[newParentName] = self.ModuleDef(
                         parentName, implicit = implicit, guess = guess,
-                        fromSource = fromSource)
+                        fromSource = fromSource, text = text)
 
                 else:
                     # Now get all the py files in the parent directory.
@@ -820,7 +825,7 @@ class Freezer:
             # A normal, explicit module name.
             self.modules[newName] = self.ModuleDef(
                 moduleName, filename = filename, implicit = implicit,
-                guess = guess, fromSource = fromSource)
+                guess = guess, fromSource = fromSource, text = text)
 
     def done(self, compileToExe = False):
         """ Call this method after you have added all modules with
@@ -971,7 +976,10 @@ class Freezer:
                 stuff = ("", "rb", imp.PY_COMPILED)
                 self.mf.load_module(mdef.moduleName, fp, pathname, stuff)
             else:
-                fp = open(pathname, modulefinder.READ_MODE)
+                if mdef.text:
+                    fp = StringIO(mdef.text)
+                else:
+                    fp = open(pathname, 'U')
                 stuff = ("", "r", imp.PY_SOURCE)
                 self.mf.load_module(mdef.moduleName, fp, pathname, stuff)
 
@@ -1063,7 +1071,7 @@ class Freezer:
 
     def __addPyc(self, multifile, filename, code, compressionLevel):
         if code:
-            data = imp.get_magic() + '\0\0\0\0' + \
+            data = imp.get_magic() + b'\0\0\0\0' + \
                    marshal.dumps(code)
 
             stream = StringStream(data)
@@ -1342,7 +1350,10 @@ class Freezer:
         for i in range(0, len(code), 16):
             result += '\n  '
             for c in code[i:i+16]:
-                result += ('%d,' % ord(c))
+                if isinstance(c, int): # Python 3
+                    result += ('%d,' % c)
+                else: # Python 2
+                    result += ('%d,' % ord(c))
         result += '\n};\n'
         return result
 
@@ -1393,15 +1404,6 @@ class PandaModuleFinder(modulefinder.ModuleFinder):
             if p3extend_frozen and p3extend_frozen.is_frozen_module(name):
                 # It's a frozen module.
                 return (None, name, ('', '', imp.PY_FROZEN))
-
-        # Look for a dtool extension.  This loop is roughly lifted
-        # from extension_native_helpers.Dtool_PreloadDLL().
-        filename = name + dll_suffix + dll_ext
-        for dir in sys.path + [sys.prefix]:
-            lib = os.path.join(dir, filename)
-            if os.path.exists(lib):
-                file = open(lib, 'rb')
-                return (file, lib, (dll_ext, 'rb', imp.C_EXTENSION))
 
         message = "DLL loader cannot find %s." % (name)
         raise ImportError, message

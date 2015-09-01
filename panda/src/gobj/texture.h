@@ -84,6 +84,7 @@ PUBLISHED:
     TT_2d_texture_array,
     TT_cube_map,
     TT_buffer_texture,
+    TT_cube_map_array,
   };
 
   enum ComponentType {
@@ -155,6 +156,9 @@ PUBLISHED:
     F_rg8i, // 8 integer bits per R,G channel
     F_rgb8i, // 8 integer bits per R,G,B channel
     F_rgba8i, // 8 integer bits per R,G,B,A channel
+
+    F_r11_g11_b10, // unsigned floating-point, 11 Red, 11 Green, 10 Blue Bits
+
   };
 
   // Deprecated.  See SamplerState.FilterType.
@@ -242,6 +246,9 @@ PUBLISHED:
   INLINE void setup_2d_texture_array(int z_size = 1);
   INLINE void setup_2d_texture_array(int x_size, int y_size, int z_size,
                                      ComponentType component_type, Format format);
+  INLINE void setup_cube_map_array(int num_cube_maps);
+  INLINE void setup_cube_map_array(int size, int num_cube_maps,
+                                   ComponentType component_type, Format format);
   INLINE void setup_buffer_texture(int size, ComponentType component_type,
                                    Format format, GeomEnums::UsageHint usage);
   void generate_normalization_cube_map(int size);

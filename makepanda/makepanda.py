@@ -455,9 +455,8 @@ SdkAutoDisableMax()
 SdkAutoDisablePhysX()
 SdkAutoDisableSpeedTree()
 
-if (RTDIST and DISTRIBUTOR == "cmu"):
-    HOST_URL = "https://runtime.panda3d.org/"
-
+if RTDIST and DISTRIBUTOR == "cmu":
+    # Some validation checks for the CMU builds.
     if (RTDIST_VERSION == "cmu_1.7" and SDK["PYTHONVERSION"] != "python2.6"):
         exit("The CMU 1.7 runtime distribution must be built against Python 2.6!")
     elif (RTDIST_VERSION == "cmu_1.8" and SDK["PYTHONVERSION"] != "python2.7"):
@@ -465,7 +464,7 @@ if (RTDIST and DISTRIBUTOR == "cmu"):
     elif (RTDIST_VERSION == "cmu_1.9" and SDK["PYTHONVERSION"] != "python2.7"):
         exit("The CMU 1.9 runtime distribution must be built against Python 2.7!")
 
-elif RTDIST and not HOST_URL:
+if RTDIST and not HOST_URL:
     exit("You must specify a host URL when building the rtdist!")
 
 if RUNTIME and not HOST_URL:
@@ -3271,6 +3270,7 @@ IGATEFILES=GetDirectoryContents('panda/src/downloader', ["*.h", "*_composite*.cx
 TargetAdd('libp3downloader.in', opts=OPTS, input=IGATEFILES)
 TargetAdd('libp3downloader.in', opts=['IMOD:panda3d.core', 'ILIB:libp3downloader', 'SRCDIR:panda/src/downloader'])
 TargetAdd('libp3downloader_igate.obj', input='libp3downloader.in', opts=["DEPENDENCYONLY"])
+TargetAdd('p3downloader_stringStream_ext.obj', opts=OPTS, input='stringStream_ext.cxx')
 
 #
 # DIRECTORY: panda/metalibs/pandaexpress/
@@ -3905,6 +3905,7 @@ if (not RUNTIME):
   TargetAdd('core_module.obj', opts=['IMOD:panda3d._core', 'ILIB:_core'])
 
   TargetAdd('_core.pyd', input='libp3downloader_igate.obj')
+  TargetAdd('_core.pyd', input='p3downloader_stringStream_ext.obj')
   TargetAdd('_core.pyd', input='p3express_ext_composite.obj')
   TargetAdd('_core.pyd', input='libp3express_igate.obj')
 
@@ -5026,11 +5027,13 @@ if (RTDIST or RUNTIME):
     TargetAdd('p3dpython.exe', input='p3dpython_p3dPythonMain.obj')
     TargetAdd('p3dpython.exe', input=COMMON_PANDA_LIBS)
     TargetAdd('p3dpython.exe', input='libp3tinyxml.ilb')
+    TargetAdd('p3dpython.exe', input='libp3interrogatedb.dll')
     TargetAdd('p3dpython.exe', opts=['PYTHON', 'WINUSER'])
 
     TargetAdd('libp3dpython.dll', input='p3dpython_p3dpython_composite1.obj')
     TargetAdd('libp3dpython.dll', input=COMMON_PANDA_LIBS)
     TargetAdd('libp3dpython.dll', input='libp3tinyxml.ilb')
+    TargetAdd('libp3dpython.dll', input='libp3interrogatedb.dll')
     TargetAdd('libp3dpython.dll', opts=['PYTHON', 'WINUSER'])
 
     if GetTarget() == 'windows':
@@ -5042,6 +5045,7 @@ if (RTDIST or RUNTIME):
       TargetAdd('p3dpythonw.exe', input='p3dpythonw_p3dPythonMain.obj')
       TargetAdd('p3dpythonw.exe', input=COMMON_PANDA_LIBS)
       TargetAdd('p3dpythonw.exe', input='libp3tinyxml.ilb')
+      TargetAdd('p3dpythonw.exe', input='libp3interrogatedb.dll')
       TargetAdd('p3dpythonw.exe', opts=['SUBSYSTEM:WINDOWS', 'PYTHON', 'WINUSER'])
 
   if (PkgSkip("OPENSSL")==0 and RTDIST):
@@ -6670,8 +6674,8 @@ def MakeInstallerLinux():
             depends = ReadFile("targetroot/debian/substvars_dep").replace("shlibs:Depends=", "").strip()
             recommends = ReadFile("targetroot/debian/substvars_rec").replace("shlibs:Depends=", "").strip()
             if PkgSkip("PYTHON")==0:
-                depends += ", " + PYTHONV + ", python-pmw"
-                recommends += ", python-wxversion, python-profiler (>= " + PV + "), python-tk (>= " + PV + ")"
+                depends += ", " + PYTHONV
+                recommends += ", python-wxversion, python-profiler (>= " + PV + "), python-pmw, python-tk (>= " + PV + ")"
             if PkgSkip("NVIDIACG")==0:
                 depends += ", nvidia-cg-toolkit"
 
