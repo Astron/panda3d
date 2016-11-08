@@ -239,12 +239,12 @@ class AstronClientRepository(ClientRepositoryBase):
             if version_string == '':
                 self.notify.error('server-version is missing in your configuration files.  It is needed in order to send \'CLIENT_HELLO\' to the server.')
 
-           dg = PyDatagram()
-           dg.add_uint16(CLIENT_HELLO)
-           dg.add_uint32(self.get_dc_file().get_hash())
-           dg.add_string(version_string)
-           self.send(dg)
-        
+        dg = PyDatagram()
+        dg.add_uint16(CLIENT_HELLO)
+        dg.add_uint32(self.get_dc_file().get_hash())
+        dg.add_string(version_string)
+        self.send(dg)
+
     def sendHeartbeat(self):
         datagram = PyDatagram()
         datagram.addUint16(CLIENT_HEARTBEAT)
