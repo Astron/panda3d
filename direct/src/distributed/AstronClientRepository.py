@@ -4,7 +4,6 @@ from direct.directnotify import DirectNotifyGlobal
 from ClientRepositoryBase import ClientRepositoryBase
 from MsgTypes import *
 from direct.distributed.PyDatagram import PyDatagram
-from pandac.PandaModules import STUint16, STUint32
 
 class AstronClientRepository(ClientRepositoryBase):
     """
@@ -232,13 +231,13 @@ class AstronClientRepository(ClientRepositoryBase):
             fieldName, distObj.doId, args)
         self.send(dg)
 
-    # FIXME: The version string should default to a .prc variable.
-    def sendHello(self, version_string):
-        dg = PyDatagram()
-        dg.add_uint16(CLIENT_HELLO)
-        dg.add_uint32(self.get_dc_file().get_hash())
-        dg.add_string(version_string)
-        self.send(dg)
+    def sendHello(self, version_string=None):
+        # If the string is passed as an argument, use that.
+        if version_string == None:
+            # Or, get the string from the loaded prc files.
+            version_string = base.config.GetString('server-version' '')
+            if version_string == '':
+                self.notify.error('server-version is missing in your configuration files.  It is needed in order to send \'CLIENT_HELLO\' to the server.')
 
     def sendHeartbeat(self):
         datagram = PyDatagram()
