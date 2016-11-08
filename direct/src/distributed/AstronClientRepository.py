@@ -235,7 +235,7 @@ class AstronClientRepository(ClientRepositoryBase):
         # If the string is passed as an argument, use that.
         if version_string == None:
             # Or, get the string from the loaded prc files.
-            version_string = base.config.GetString('server-version' '')
+            version_string = base.config.GetString('server-version', '')
             if version_string == '':
                 self.notify.error('server-version is missing in your configuration files.  It is needed in order to send \'CLIENT_HELLO\' to the server.')
 
