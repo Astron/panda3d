@@ -755,7 +755,7 @@ class AstronInternalRepository(ConnectionRepository):
             self.notify.error('Invalid className %s when trying to set sendable fields!' % (className))
         
         dclass = self.dclassesByName[className]
-        fieldPacker = DCPacker()
+        fieldPacker = PyDatagram()
         fieldCount = 0
         if fields:
             for fieldName in fields:
@@ -763,17 +763,14 @@ class AstronInternalRepository(ConnectionRepository):
                 if not field:
                     self.notify.error('Allow sendable fields request for %s object contains invalid field named %s' % (
                         dclass.getName(), fieldName))
-
-                fieldPacker.rawPackUint16(field.getNumber())
-                fieldPacker.beginPack(field)
-                field.packArgs(fieldPacker, v)
-                fieldPacker.endPack()
+                
+                fieldPacker.add_uint16(field.getNumber())
                 fieldCount += 1
         
         dg = PyDatagram()
         dg.addServerHeader(doId, self.ourChannel, CLIENTAGENT_SET_FIELDS_SENDABLE)
         dg.add_uint32(doId)
         dg.add_uint16(fieldCount)
-        dg.appendData(fieldPacker.getString())
+        dg.appendData(fieldPacker.getMessage())
         self.send(dg)
 
