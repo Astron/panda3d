@@ -749,3 +749,31 @@ class AstronInternalRepository(ConnectionRepository):
         dg.addServerHeader(doId, self.ourChannel, STATESERVER_OBJECT_SET_OWNER)
         dg.add_uint64(newOwner)
         self.send(dg)
+
+    def setAllowClientSend(self, doId, className, fields):
+        if className not in self.dclassesByName:
+            self.notify.error('Invalid className %s when trying to set sendable fields!' % (className))
+        
+        dclass = self.dclassesByName[className]
+        fieldPacker = DCPacker()
+        fieldCount = 0
+        if fields:
+            for fieldName in fields:
+                field = dclass.getFieldByName(fieldName)
+                if not field:
+                    self.notify.error('Allow sendable fields request for %s object contains invalid field named %s' % (
+                        dclass.getName(), fieldName))
+
+                fieldPacker.rawPackUint16(field.getNumber())
+                fieldPacker.beginPack(field)
+                field.packArgs(fieldPacker, v)
+                fieldPacker.endPack()
+                fieldCount += 1
+        
+        dg = PyDatagram()
+        dg.addServerHeader(doId, self.ourChannel, CLIENTAGENT_SET_FIELDS_SENDABLE)
+        dg.add_uint32(doId)
+        dg.add_uint16(fieldCount)
+        dg.appendData(fieldPacker.getString())
+        self.send(dg)
+
