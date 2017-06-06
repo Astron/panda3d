@@ -175,7 +175,7 @@ class ClientRepositoryBase(ConnectionRepository):
         "generate" messages when they are replayed().
         """
 
-        if msgType == CLIENT_CREATE_OBJECT_REQUIRED_OTHER:
+        if msgType == CLIENT_ENTER_OBJECT_REQUIRED_OTHER:
             # It's a generate message.
             doId = extra
             if doId in self.deferredDoIds:
