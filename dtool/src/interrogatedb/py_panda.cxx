@@ -17,6 +17,8 @@
 
 #ifdef HAVE_PYTHON
 
+using std::string;
+
 PyMemberDef standard_type_members[] = {
   {(char *)"this", (sizeof(void*) == sizeof(int)) ? T_UINT : T_ULONGLONG, offsetof(Dtool_PyInstDef, _ptr_to_object), READONLY, (char *)"C++ 'this' pointer, if any"},
   {(char *)"this_ownership", T_BOOL, offsetof(Dtool_PyInstDef, _memory_rules), READONLY, (char *)"C++ 'this' ownership rules"},
@@ -140,13 +142,6 @@ DTOOL_Call_GetPointerThisClass(PyObject *self, Dtool_PyTypedObject *classdef,
     return Dtool_Raise_ArgTypeError(self, param, function_name.c_str(), classdef->_PyType.tp_name);
   }
 
-  return nullptr;
-}
-
-void *DTOOL_Call_GetPointerThis(PyObject *self) {
-  if (self != nullptr && DtoolInstance_Check(self)) {
-    return DtoolInstance_VOID_PTR(self);
-  }
   return nullptr;
 }
 
@@ -311,11 +306,39 @@ PyObject *_Dtool_Return(PyObject *value) {
   return value;
 }
 
+#if PY_VERSION_HEX < 0x03040000
+static PyObject *Dtool_EnumType_Str(PyObject *self) {
+  PyObject *name = PyObject_GetAttrString(self, "name");
+#if PY_MAJOR_VERSION >= 3
+  PyObject *repr = PyUnicode_FromFormat("%s.%s", Py_TYPE(self)->tp_name, PyString_AS_STRING(name));
+#else
+  PyObject *repr = PyString_FromFormat("%s.%s", Py_TYPE(self)->tp_name, PyString_AS_STRING(name));
+#endif
+  Py_DECREF(name);
+  return repr;
+}
+
+static PyObject *Dtool_EnumType_Repr(PyObject *self) {
+  PyObject *name = PyObject_GetAttrString(self, "name");
+  PyObject *value = PyObject_GetAttrString(self, "value");
+#if PY_MAJOR_VERSION >= 3
+  PyObject *repr = PyUnicode_FromFormat("<%s.%s: %ld>", Py_TYPE(self)->tp_name, PyString_AS_STRING(name), PyLongOrInt_AS_LONG(value));
+#else
+  PyObject *repr = PyString_FromFormat("<%s.%s: %ld>", Py_TYPE(self)->tp_name, PyString_AS_STRING(name), PyLongOrInt_AS_LONG(value));
+#endif
+  Py_DECREF(name);
+  Py_DECREF(value);
+  return repr;
+}
+#endif
+
 /**
- * Creates a Python 3.4-style enum type.  Steals reference to 'names'.
+ * Creates a Python 3.4-style enum type.  Steals reference to 'names', which
+ * should be a tuple of (name, value) pairs.
  */
-PyObject *Dtool_EnumType_Create(const char *name, PyObject *names, const char *module) {
+PyTypeObject *Dtool_EnumType_Create(const char *name, PyObject *names, const char *module) {
   static PyObject *enum_class = nullptr;
+#if PY_VERSION_HEX >= 0x03040000
   static PyObject *enum_meta = nullptr;
   static PyObject *enum_create = nullptr;
   if (enum_meta == nullptr) {
@@ -330,12 +353,69 @@ PyObject *Dtool_EnumType_Create(const char *name, PyObject *names, const char *m
 
   PyObject *result = PyObject_CallFunction(enum_create, (char *)"OsN", enum_class, name, names);
   nassertr(result != nullptr, nullptr);
+#else
+  static PyObject *name_str;
+  static PyObject *name_sunder_str;
+  static PyObject *value_str;
+  static PyObject *value_sunder_str;
+  // Emulate something vaguely like the enum module.
+  if (enum_class == nullptr) {
+#if PY_MAJOR_VERSION >= 3
+    name_str = PyUnicode_InternFromString("name");
+    value_str = PyUnicode_InternFromString("value");
+    name_sunder_str = PyUnicode_InternFromString("_name_");
+    value_sunder_str = PyUnicode_InternFromString("_value_");
+#else
+    name_str = PyString_InternFromString("name");
+    value_str = PyString_InternFromString("value");
+    name_sunder_str = PyString_InternFromString("_name_");
+    value_sunder_str = PyString_InternFromString("_value_");
+#endif
+    PyObject *name_value_tuple = PyTuple_New(4);
+    PyTuple_SET_ITEM(name_value_tuple, 0, name_str);
+    PyTuple_SET_ITEM(name_value_tuple, 1, value_str);
+    PyTuple_SET_ITEM(name_value_tuple, 2, name_sunder_str);
+    PyTuple_SET_ITEM(name_value_tuple, 3, value_sunder_str);
+    Py_INCREF(name_str);
+    Py_INCREF(value_str);
+
+    PyObject *slots_dict = PyDict_New();
+    PyDict_SetItemString(slots_dict, "__slots__", name_value_tuple);
+    Py_DECREF(name_value_tuple);
+
+    enum_class = PyObject_CallFunction((PyObject *)&PyType_Type, (char *)"s()N", "Enum", slots_dict);
+    nassertr(enum_class != nullptr, nullptr);
+  }
+  PyObject *result = PyObject_CallFunction((PyObject *)&PyType_Type, (char *)"s(O)N", name, enum_class, PyDict_New());
+  nassertr(result != nullptr, nullptr);
+
+  ((PyTypeObject *)result)->tp_str = Dtool_EnumType_Str;
+  ((PyTypeObject *)result)->tp_repr = Dtool_EnumType_Repr;
+
+  // Copy the names as instances of the above to the class dict.
+  Py_ssize_t size = PyTuple_GET_SIZE(names);
+  for (Py_ssize_t i = 0; i < size; ++i) {
+    PyObject *item = PyTuple_GET_ITEM(names, i);
+    PyObject *name = PyTuple_GET_ITEM(item, 0);
+    PyObject *value = PyTuple_GET_ITEM(item, 1);
+    PyObject *member = _PyObject_CallNoArg(result);
+    PyObject_SetAttr(member, name_str, name);
+    PyObject_SetAttr(member, name_sunder_str, name);
+    PyObject_SetAttr(member, value_str, value);
+    PyObject_SetAttr(member, value_sunder_str, value);
+    PyObject_SetAttr(result, name, member);
+    Py_DECREF(member);
+  }
+  Py_DECREF(names);
+#endif
+
   if (module != nullptr) {
     PyObject *modstr = PyUnicode_FromString(module);
     PyObject_SetAttrString(result, "__module__", modstr);
     Py_DECREF(modstr);
   }
-  return result;
+  nassertr(PyType_Check(result), nullptr);
+  return (PyTypeObject *)result;
 }
 
 /**
@@ -432,7 +512,7 @@ void Dtool_Accum_MethDefs(PyMethodDef in[], MethodDefmap &themap) {
 // are uniquly defined by an integer.
 void
 RegisterNamedClass(const string &name, Dtool_PyTypedObject &otype) {
-  pair<NamedTypeMap::iterator, bool> result =
+  std::pair<NamedTypeMap::iterator, bool> result =
     named_type_map.insert(NamedTypeMap::value_type(name, &otype));
 
   if (!result.second) {
@@ -457,7 +537,7 @@ RegisterRuntimeTypedClass(Dtool_PyTypedObject &otype) {
       << " has an illegal TypeHandle value; check that init_type() is called.\n";
 
   } else {
-    pair<RuntimeTypeMap::iterator, bool> result =
+    std::pair<RuntimeTypeMap::iterator, bool> result =
       runtime_type_map.insert(RuntimeTypeMap::value_type(type_index, &otype));
     if (!result.second) {
       // There was already an entry in the dictionary for type_index.
@@ -538,7 +618,7 @@ PyObject *Dtool_PyModuleInitHelper(LibraryDef *defs[], const char *modulename) {
       version[2] != '0' + PY_MINOR_VERSION) {
     // Raise a helpful error message.  We can safely do this because the
     // signature and behavior for PyErr_SetString has remained consistent.
-    ostringstream errs;
+    std::ostringstream errs;
     errs << "this module was compiled for Python "
          << PY_MAJOR_VERSION << "." << PY_MINOR_VERSION << ", which is "
          << "incompatible with Python " << version.substr(0, 3);
@@ -587,10 +667,6 @@ PyObject *Dtool_PyModuleInitHelper(LibraryDef *defs[], const char *modulename) {
     if (PyType_Ready(&Dtool_StaticProperty_Type) < 0) {
       return Dtool_Raise_TypeError("PyType_Ready(Dtool_StaticProperty_Type)");
     }
-
-#ifdef Py_TRACE_REFS
-    _Py_AddToAllObjects((PyObject *)&Dtool_EmptyTuple, 0);
-#endif
 
     // Initialize the base class of everything.
     Dtool_PyModuleClassInit_DTOOL_SUPER_BASE(nullptr);
@@ -715,7 +791,7 @@ PyObject *Dtool_BorrowThisReference(PyObject *self, PyObject *args) {
 
 // We do expose a dictionay for dtool classes .. this should be removed at
 // some point..
-PyObject *Dtool_AddToDictionary(PyObject *self1, PyObject *args) {
+EXPCL_INTERROGATEDB PyObject *Dtool_AddToDictionary(PyObject *self1, PyObject *args) {
   PyObject *self;
   PyObject *subject;
   PyObject *key;
@@ -732,127 +808,6 @@ PyObject *Dtool_AddToDictionary(PyObject *self1, PyObject *args) {
   }
   Py_INCREF(Py_None);
   return Py_None;
-}
-
-Py_hash_t DTOOL_PyObject_HashPointer(PyObject *self) {
-  if (self != nullptr && DtoolInstance_Check(self)) {
-    return (Py_hash_t)(intptr_t)DtoolInstance_VOID_PTR(self);
-  }
-  return -1;
-}
-
-/* Compare v to w.  Return
-   -1 if v <  w or exception (PyErr_Occurred() true in latter case).
-    0 if v == w.
-    1 if v > w.
-   XXX The docs (C API manual) say the return value is undefined in case
-   XXX of error.
-*/
-
-int DTOOL_PyObject_ComparePointers(PyObject *v1, PyObject *v2) {
-  // try this compare
-  void *v1_this = DTOOL_Call_GetPointerThis(v1);
-  void *v2_this = DTOOL_Call_GetPointerThis(v2);
-  if (v1_this != nullptr && v2_this != nullptr) { // both are our types...
-    if (v1_this < v2_this) {
-      return -1;
-    }
-    if (v1_this > v2_this) {
-      return 1;
-    }
-    return 0;
-  }
-
-  // ok self compare...
-  if (v1 < v2) {
-    return -1;
-  }
-  if (v1 > v2) {
-    return 1;
-  }
-  return 0;
-}
-
-int DTOOL_PyObject_Compare(PyObject *v1, PyObject *v2) {
-  // First try compareTo function..
-  PyObject * func = PyObject_GetAttrString(v1, "compare_to");
-  if (func == nullptr) {
-    PyErr_Clear();
-  } else {
-#if PY_VERSION_HEX >= 0x03060000
-    PyObject *res = _PyObject_FastCall(func, &v2, 1);
-#else
-    PyObject *res = nullptr;
-    PyObject *args = PyTuple_Pack(1, v2);
-    if (args != nullptr) {
-      res = PyObject_Call(func, args, nullptr);
-      Py_DECREF(args);
-    }
-#endif
-    Py_DECREF(func);
-    PyErr_Clear(); // just in case the function threw an error
-    // only use if the function returns an INT... hmm
-    if (res != nullptr) {
-      if (PyLong_Check(res)) {
-        long answer = PyLong_AsLong(res);
-        Py_DECREF(res);
-
-        // Python really wants us to return strictly -1, 0, or 1.
-        if (answer < 0) {
-          return -1;
-        } else if (answer > 0) {
-          return 1;
-        } else {
-          return 0;
-        }
-      }
-#if PY_MAJOR_VERSION < 3
-      else if (PyInt_Check(res)) {
-        long answer = PyInt_AsLong(res);
-        Py_DECREF(res);
-
-        // Python really wants us to return strictly -1, 0, or 1.
-        if (answer < 0) {
-          return -1;
-        } else if (answer > 0) {
-          return 1;
-        } else {
-          return 0;
-        }
-      }
-#endif
-      Py_DECREF(res);
-    }
-  }
-
-  return DTOOL_PyObject_ComparePointers(v1, v2);
-}
-
-PyObject *DTOOL_PyObject_RichCompare(PyObject *v1, PyObject *v2, int op) {
-  int cmpval = DTOOL_PyObject_Compare(v1, v2);
-  bool result;
-  switch (op) {
-  NODEFAULT
-  case Py_LT:
-    result = (cmpval < 0);
-    break;
-  case Py_LE:
-    result = (cmpval <= 0);
-    break;
-  case Py_EQ:
-    result = (cmpval == 0);
-    break;
-  case Py_NE:
-    result = (cmpval != 0);
-    break;
-  case Py_GT:
-    result = (cmpval > 0);
-    break;
-  case Py_GE:
-    result = (cmpval >= 0);
-    break;
-  }
-  return PyBool_FromLong(result);
 }
 
 /**
@@ -875,15 +830,7 @@ PyObject *copy_from_make_copy(PyObject *self, PyObject *noargs) {
  */
 PyObject *copy_from_copy_constructor(PyObject *self, PyObject *noargs) {
   PyObject *callable = (PyObject *)Py_TYPE(self);
-
-#if PY_VERSION_HEX >= 0x03060000
-  PyObject *result = _PyObject_FastCall(callable, &self, 1);
-#else
-  PyObject *args = PyTuple_Pack(1, self);
-  PyObject *result = PyObject_Call(callable, args, nullptr);
-  Py_DECREF(args);
-#endif
-  return result;
+  return _PyObject_FastCall(callable, &self, 1);
 }
 
 /**
