@@ -4,7 +4,6 @@ from direct.directnotify import DirectNotifyGlobal
 from ClientRepositoryBase import ClientRepositoryBase
 from MsgTypes import *
 from direct.distributed.PyDatagram import PyDatagram
-from pandac.PandaModules import STUint16, STUint32
 
 class AstronClientRepository(ClientRepositoryBase):
     """
@@ -34,7 +33,9 @@ class AstronClientRepository(ClientRepositoryBase):
         self.message_handlers = {CLIENT_HELLO_RESP: self.handleHelloResp,
                                  CLIENT_EJECT: self.handleEject,
                                  CLIENT_ENTER_OBJECT_REQUIRED: self.handleEnterObjectRequired,
+                                 CLIENT_ENTER_OBJECT_REQUIRED_OTHER: self.handleEnterObjectRequiredOther,
                                  CLIENT_ENTER_OBJECT_REQUIRED_OWNER: self.handleEnterObjectRequiredOwner,
+                                 CLIENT_ENTER_OBJECT_REQUIRED_OTHER_OWNER: self.handleEnterObjectRequiredOtherOwner,
                                  CLIENT_OBJECT_SET_FIELD: self.handleUpdateField,
                                  CLIENT_OBJECT_SET_FIELDS: self.handleUpdateFields,
                                  CLIENT_OBJECT_LEAVING: self.handleObjectLeaving,
@@ -70,20 +71,36 @@ class AstronClientRepository(ClientRepositoryBase):
         messenger.send("CLIENT_EJECT", [error_code, reason])
 
     def handleEnterObjectRequired(self, di):
-        do_id = di.getArg(STUint32)
-        parent_id = di.getArg(STUint32)
-        zone_id = di.getArg(STUint32)
-        dclass_id = di.getArg(STUint16)
+        do_id = di.get_uint32()
+        parent_id = di.get_uint32()
+        zone_id = di.get_uint32()
+        dclass_id = di.get_uint16()
         dclass = self.dclassesByNumber[dclass_id]
         self.generateWithRequiredFields(dclass, do_id, di, parent_id, zone_id)
 
+    def handleEnterObjectRequiredOther(self, di):
+        do_id = di.get_uint32()
+        parent_id = di.get_uint32()
+        zone_id = di.get_uint32()
+        dclass_id = di.get_uint16()
+        dclass = self.dclassesByNumber[dclass_id]
+        self.generateWithRequiredOtherFields(dclass, do_id, di, parent_id, zone_id)
+
     def handleEnterObjectRequiredOwner(self, di):
-        avatar_doId = di.getArg(STUint32)
-        parentId = di.getArg(STUint32)
-        zoneId = di.getArg(STUint32)
-        dclass_id = di.getArg(STUint16)
+        avatar_doId = di.get_uint32()
+        parent_id = di.get_uint32()
+        zone_id = di.get_uint32()
+        dclass_id = di.get_uint16()
         dclass = self.dclassesByNumber[dclass_id]
         self.generateWithRequiredFieldsOwner(dclass, avatar_doId, di)
+
+    def handleEnterObjectRequiredOtherOwner(self, di):
+        avatar_doId = di.get_uint32()
+        parent_id = di.get_uint32()
+        zone_id = di.get_uint32()
+        dclass_id = di.get_uint16()
+        dclass = self.dclassesByNumber[dclass_id]
+        self.generateWithRequiredOtherFieldsOwner(dclass, avatar_doId, di)
 
     def generateWithRequiredFieldsOwner(self, dclass, doId, di):
         if doId in self.doId2ownerView:
@@ -214,8 +231,14 @@ class AstronClientRepository(ClientRepositoryBase):
             fieldName, distObj.doId, args)
         self.send(dg)
 
-    # FIXME: The version string should default to a .prc variable.
-    def sendHello(self, version_string):
+    def sendHello(self, version_string=None):
+        # If the string is passed as an argument, use that.
+        if version_string == None:
+            # Or, get the string from the loaded prc files.
+            version_string = base.config.GetString('server-version', '')
+            if version_string == '':
+                self.notify.error('server-version is missing in your configuration files.  It is needed in order to send \'CLIENT_HELLO\' to the server.')
+
         dg = PyDatagram()
         dg.add_uint16(CLIENT_HELLO)
         dg.add_uint32(self.get_dc_file().get_hash())
