@@ -137,6 +137,7 @@ MsgName2Id = {
     'CLIENTAGENT_ADD_INTEREST':                     1200,
     'CLIENTAGENT_ADD_INTEREST_MULTIPLE':            1201,
     'CLIENTAGENT_REMOVE_INTEREST':                  1203,
+    'CLIENTAGENT_DONE_INTEREST_RESP':               1204,
     }
 
 # create id->name table for debugging
